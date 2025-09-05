@@ -1,0 +1,198 @@
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TextInput, Button, TouchableOpacity } from 'react-native';
+import MapView, { Marker } from 'react-native-maps';
+import * as Location from 'expo-location';
+import * as Speech from 'expo-speech';
+import { useNavigation } from '@react-navigation/native';
+
+export default function Map() {
+  // states varables
+  const [location, setLocation] = useState(null);
+  const [address, setAddress] = useState('');
+  const [errorMsg, setErrorMsg] = useState(null);
+  const [pin, setPin] = useState(null);
+  const [region, setRegion] = useState({
+    latitude: 36.161337446207504,
+    longitude: -86.778358195515074,
+    latitudeDelta: 0.0922,
+    longitudeDelta: 0.0421,
+    
+  });
+
+  // Placeholder for taskList
+  const [taskList, setTaskList] = useState([]);
+
+  const navigation = useNavigation();
+// function to speak the given adress
+  const speak = (text) => {
+    Speech.speak(text);
+  };
+  // Effect hook to fetch current location and initial address on component mount
+
+  useEffect(() => {
+    (async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        setErrorMsg('Permission to access location was denied');
+        return;
+      }
+
+      try {
+        const currentLocation = await Location.getCurrentPositionAsync({});
+        setLocation(currentLocation);
+
+        const addressResponse = await Location.reverseGeocodeAsync({
+          latitude: currentLocation.coords.latitude,
+          longitude: currentLocation.coords.longitude,
+        });
+
+        if (addressResponse.length > 0) {
+          const { street, city, region, postalCode } = addressResponse[0];
+          const initialAddress = `${street}, ${city}, ${region} ${postalCode}`;
+          setAddress(initialAddress);
+          speak(initialAddress);
+        }
+      } catch (error) {
+        setErrorMsg('Error fetching address');
+      }
+    })();
+  }, []);
+  // Function to handle address search
+  const handleSearch = async () => {
+    try {
+      const locationResult = await Location.geocodeAsync(address);
+
+      if (locationResult.length > 0) {
+        const newRegion = {
+          latitude: locationResult[0].latitude,
+          longitude: locationResult[0].longitude,
+          latitudeDelta: 0.0922,
+          longitudeDelta: 0.0421,
+        };
+        setRegion(newRegion);
+        setPin({
+          latitude: newRegion.latitude,
+          longitude: newRegion.longitude,
+        });
+
+        const { street, city, region, postalCode } = locationResult[0];
+        const searchedAddress = `${street}, ${city}, ${region} ${postalCode}`;
+        
+      } else {
+        console.log('No results found');
+      }
+    } catch (error) {
+      console.error('Error searching for the address:', error);
+    }
+  };
+  // Function to reset address and map to initial state
+
+  const handleReset = () => {
+    setAddress('');
+    setPin(null);
+    setRegion({
+      latitude: location ? location.coords.latitude : 36.161337446207504,
+      longitude: location ? location.coords.longitude : -86.778358195515074,
+      latitudeDelta: 0.0922,
+      longitudeDelta: 0.0421,
+    });
+  };
+
+  const next = () => {
+    navigation.navigate('Calender', { paramKey: taskList.map((task) => task.task) });
+    // Assuming taskList is defined somewhere
+    // playSound(require('./water.mp3'));
+  };
+  // Function to speak the address of the dragged pin
+
+  const speakForDraggedPin = async (latitude, longitude) => {
+    try {
+      const addressResponse = await Location.reverseGeocodeAsync({
+        latitude: latitude,
+        longitude: longitude,
+      });
+
+      if (addressResponse.length > 0) {
+        const { street, city, region, postalCode } = addressResponse[0];
+        const draggedPinAddress = `${street}, ${city}, ${region} ${postalCode}`;
+        speak(draggedPinAddress);
+      }
+    } catch (error) {
+      console.error('Error fetching address for dragged pin:', error);
+      setErrorMsg('Error fetching address for dragged pin');
+    }
+  };
+
+  return (
+    <View style={styles.container}>
+      <MapView style={styles.map} region={region} onRegionChangeComplete={(newRegion) => setRegion(newRegion)}>
+        {pin && (
+          <Marker
+            coordinate={pin ? pin : region}
+            draggable
+            onDragEnd={(e) => {
+              setPin(e.nativeEvent.coordinate);
+              speakForDraggedPin(e.nativeEvent.coordinate.latitude, e.nativeEvent.coordinate.longitude);
+            }}
+          />
+        )}
+      
+  </MapView>
+      {/* Input container for address input, search button, and reset button */}
+      <View style={styles.inputContainer}>
+        {/* Input for entering address */}
+        <TextInput
+          style={styles.input}
+          placeholder="Enter an address..."
+          value={address}
+          onChangeText={(text) => setAddress(text)}
+        />
+        {/* Search button to initiate address search */}
+        <Button title="Search" onPress={handleSearch} />
+        {/* Reset button to start over */}
+        <Button title="Start Over" onPress={handleReset} />
+      </View>
+      {/* Display the current address */}
+      <Text style={styles.addressText}>{address}</Text>
+      {/* Display error message if any */}
+      {errorMsg && <Text style={styles.errorText}>{errorMsg}</Text>}
+      
+    </View>
+  );
+}
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  map: {
+    flex: 1,
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 10,
+  },
+  input: {
+    flex: 1,
+    height: 40,
+    borderColor: 'purple',
+    borderWidth: 1,
+    marginRight: 10,
+    paddingLeft: 10,
+  },
+  addressText: {
+    padding: 20,
+    fontSize: 16,
+    textAlign: 'center',
+    backgroundColor: 'pink',
+  },
+  errorText: {
+    fontSize: 16,
+    color: 'red',
+    textAlign: 'center',
+  
+  
+  },
+  
+});
